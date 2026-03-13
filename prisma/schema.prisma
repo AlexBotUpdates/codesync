@@ -1,0 +1,188 @@
+// CodeSync - Real-time Collaborative Code Editor
+// Database Schema
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+// User roles for project membership
+enum Role {
+  owner
+  editor
+  viewer
+}
+
+// Supported programming languages
+enum Language {
+  python
+  javascript
+  java
+  cpp
+  csharp
+  ruby
+  go
+  rust
+  typescript
+  php
+}
+
+// Users table
+model User {
+  id            String   @id @default(uuid())
+  email         String   @unique
+  passwordHash  String?
+  displayName   String
+  avatarColor   String   @default("#4ECDC4")
+  emailVerified Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Relations
+  ownedProjects    Project[]
+  projectMemberships ProjectMember[]
+  documents        Document[]
+  revisions        Revision[]
+  cursorPositions  CursorPosition[]
+  activeSessions   ActiveSession[]
+  activities       Activity[]
+
+  @@map("users")
+}
+
+// Projects table
+model Project {
+  id          String   @id @default(uuid())
+  title       String
+  description String?
+  language    Language @default(javascript)
+  isPublic    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  ownerId String
+  owner   User   @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  members   ProjectMember[]
+  documents Document[]
+
+  @@map("projects")
+}
+
+// Project members table (role-based access)
+model ProjectMember {
+  id        String   @id @default(uuid())
+  role      Role     @default(viewer)
+  addedAt   DateTime @default(now())
+
+  // Relations
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, userId])
+  @@map("project_members")
+}
+
+// Documents table (code files)
+model Document {
+  id        String   @id @default(uuid())
+  filename  String
+  content   String   @default("")
+  language  Language @default(javascript)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  // Track who last edited
+  lastEditedById String?
+  lastEditedBy   User?   @relation(fields: [lastEditedById], references: [id])
+
+  revisions       Revision[]
+  cursorPositions CursorPosition[]
+  activeSessions  ActiveSession[]
+  activities      Activity[]
+
+  @@map("documents")
+}
+
+// Revisions table (version history)
+model Revision {
+  id             String   @id @default(uuid())
+  revisionNumber Int
+  content        String
+  changeSummary  String?
+  createdAt      DateTime @default(now())
+
+  // Relations
+  documentId String
+  document   Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  changedById String
+  changedBy   User @relation(fields: [changedById], references: [id])
+
+  @@unique([documentId, revisionNumber])
+  @@map("revisions")
+}
+
+// Cursor positions for real-time tracking
+model CursorPosition {
+  id           String   @id @default(uuid())
+  lineNumber   Int      @default(1)
+  columnNumber Int      @default(1)
+  updatedAt    DateTime @updatedAt
+
+  // Relations
+  documentId String
+  document   Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([documentId, userId])
+  @@map("cursor_positions")
+}
+
+// Active sessions (who is viewing/editing)
+model ActiveSession {
+  id           String   @id @default(uuid())
+  sessionToken String   @unique
+  joinedAt     DateTime @default(now())
+  lastHeartbeat DateTime @default(now())
+
+  // Relations
+  documentId String
+  document   Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("active_sessions")
+}
+
+// Activity log for real-time feed
+model Activity {
+  id          String   @id @default(uuid())
+  action      String
+  details     String?
+  createdAt   DateTime @default(now())
+
+  // Relations
+  documentId String
+  document   Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+
+  @@map("activities")
+}
